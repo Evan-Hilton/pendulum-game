@@ -1,0 +1,124 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# this project has an agent start at the top left [0][0] of a map, and the agent wants to collect apples (1) and avoid spikes (2)
+map = [[0, 1, 0, 0, 0, 0, 2, 0, 0, 2],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [2, 0, 0, 1, 2, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [2, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+       [0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
+       [2, 0, 0, 0, 0, 0, 0, 0, 0, 1]]
+# note: 30 steps should be enough to get all the apples (def possible in 26)
+
+# returns the starting state and map
+def reset():
+    map = [[0, 1, 0, 0, 0, 0, 2, 0, 0, 2],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [2, 0, 0, 1, 2, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [2, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+       [0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
+       [2, 0, 0, 0, 0, 0, 0, 0, 0, 1]]
+    return [0, 0], map, 0
+
+# just to visualize the map
+if False:
+    plt.imshow(map, cmap='viridis', interpolation='nearest')
+    plt.colorbar(label='Value Magnitude')
+    plt.title('Basic Matplotlib Heatmap')
+    plt.xlabel('X-axis Label')
+    plt.ylabel('Y-axis Label')
+    plt.show()
+
+# the environment maps a state and an action to another state
+# in this case, the action is a number 0-4 inclusive. 0-north, 1-east, 2-south, 3-west
+# the state is an array of 2 numbers representing the cartesian coordinate of where the agent is
+def env(state, action, map):
+    apples_collected = 0
+
+    # move the agent
+    if action == 0:
+        state[0] -= 1
+    if action == 1:
+        state[1] += 1
+    if action == 2:
+        state[0] += 1
+    if action == 3:
+        state[1] -= 1
+    
+    # if the agent is in an invalid location (outside the bounds of the map), move the agent back
+    if state[0] < 0:
+        state[0] = 0
+    if state[0] > 9:
+        state[0] = 9
+    if state[1] < 0:
+        state[1] = 0
+    if state[1] > 9:
+        state[1] = 9
+
+    if map[state[0]][state[1]] == 1:
+        map[state[0]][state[1]] = 0
+        apples_collected += 1
+    
+    return state, map, apples_collected
+
+# the reward function takes in the state and outputs whether this is a terminal state, whether it is a truncated state, and the reward
+def reward_func(state, map, num_apples):
+    reward = 0
+    terminal = False
+    truncated = False
+
+    if map[state[0]][state[1]] == 1:
+        reward += 1
+    elif map[state[0]][state[1]] == 2:
+        terminal = True
+    
+    if num_apples == 6:
+        truncated = True
+    
+    return reward, terminal, truncated
+
+# takes in an array of values and applies the softmax algorithm. It returns an array of values corresponding to the probability of each value
+def softmax(values):
+    sum = np.sum(np.exp(values))
+    values = np.exp(values)
+    values /= sum
+    return values
+
+def choose_action(probabilities):
+    return np.random.choice([0, 1, 2, 3], 1, p=probabilities)
+
+state = [0, 0]
+num_apples = 0
+lr = 0.01
+gamma = 0.9
+epochs = 100
+
+# the state is the first two inputs and the action is the last input
+# for example, the quality of moving east at position (4, 8) is Q[4][8][1], where 0-north, 1-east, 2-south, 3-west
+Q = np.zeros((10, 10, 4))
+
+state, map, num_apples = reset()
+
+for t in range(epochs):
+    action = choose_action(softmax(Q[state[0]][state[1]]))
+    # get the quality for the current state and chosen action (for a later computation)
+    q = Q[state[0]][state[1]][action]
+    r = state[0] # just for storing for later
+    c = state[1]
+
+    # now that an action has been chosen, update the environment and state
+    state, map, apples_collected = env(state, action, map)
+    num_apples += apples_collected
+
+    # observe the reward associated with the chosen action
+    reward, terminal, truncated = reward_func(state, map, num_apples)
+
+    Q[r][c][action] = ((1 - lr) * q) + (lr * (reward + (gamma * np.max(Q[state[0]][state[1]]))))
